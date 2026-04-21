@@ -626,7 +626,7 @@
     <script>
         // 데이터
         let changePoints = [];
-        let currentUser = { name: '', employeeId: '' };
+        let currentUser = { name: '', employeeId: '', department: '' };
         
         const classifications = [
             { 
@@ -778,9 +778,10 @@
                 
                 if (data.result === 'success') {
                     // 로그인 성공
-                    currentUser = { name: data.name, employeeId: employeeId };
+                    currentUser = { name: data.name, employeeId: employeeId, department: data.department || '' };
                     document.getElementById('userInfo').textContent = `${currentUser.name} (${currentUser.employeeId})`;
                     document.getElementById('inputManager').value = currentUser.name;
+                    document.getElementById('inputDepartment').value = currentUser.department; // 발생부서 자동 입력
                     
                     // 로그인 유지 체크 시 로컬 스토리지에 저장
                     const rememberMe = document.getElementById('rememberMe').checked;
