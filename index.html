@@ -478,6 +478,24 @@
             text-align: center;
             line-height: 1.5;
         }
+        
+        /* 날짜 입력 필드 스타일 */
+        input[type="date"] {
+            position: relative;
+            cursor: pointer;
+        }
+        
+        /* 날짜 선택기 캘린더 아이콘 표시 */
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            cursor: pointer;
+            filter: invert(1);
+            font-size: 18px;
+            padding: 4px;
+        }
+        
+        input[type="date"]::-webkit-datetime-edit {
+            padding: 2px;
+        }
     </style>
     <!-- SheetJS 라이브러리 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -558,24 +576,36 @@
                 </button>
             </div>
             
-            <!-- 기간 선택 및 엑셀 다운로드 -->
+            <!-- 기간 선택 -->
             <div style="background: #1e293b; border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 2px solid #334155;">
-                <div style="display: flex; gap: 12px; align-items: end; flex-wrap: wrap;">
+                <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
                     <div style="flex: 1; min-width: 140px;">
-                        <label style="display: block; color: #94a3b8; font-size: 14px; font-weight: 600; margin-bottom: 8px;">시작일</label>
-                        <input type="date" id="startDate" class="form-input" style="width: 100%; padding: 12px; background: #0f172a; color: #f8fafc; border: 2px solid #334155; border-radius: 8px;" />
+                        <label style="display: block; color: #94a3b8; font-size: 14px; font-weight: 600; margin-bottom: 8px;">📅 시작일</label>
+                        <input type="date" id="startDate" class="form-input" 
+                               style="width: 100%; padding: 14px; background: #0f172a; color: #f8fafc; border: 2px solid #334155; border-radius: 8px; font-size: 16px; cursor: pointer;"
+                               required />
                     </div>
                     <div style="flex: 1; min-width: 140px;">
-                        <label style="display: block; color: #94a3b8; font-size: 14px; font-weight: 600; margin-bottom: 8px;">종료일</label>
-                        <input type="date" id="endDate" class="form-input" style="width: 100%; padding: 12px; background: #0f172a; color: #f8fafc; border: 2px solid #334155; border-radius: 8px;" />
+                        <label style="display: block; color: #94a3b8; font-size: 14px; font-weight: 600; margin-bottom: 8px;">📅 종료일</label>
+                        <input type="date" id="endDate" class="form-input" 
+                               style="width: 100%; padding: 14px; background: #0f172a; color: #f8fafc; border: 2px solid #334155; border-radius: 8px; font-size: 16px; cursor: pointer;"
+                               required />
                     </div>
-                    <button onclick="downloadExcel()" style="padding: 12px 24px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; border-radius: 8px; color: white; font-size: 15px; font-weight: 700; cursor: pointer; white-space: nowrap; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">
-                        📊 엑셀 다운로드
+                    <button onclick="searchByDate()" style="padding: 12px 24px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border: none; border-radius: 8px; color: white; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4); margin-top: 16px;">
+                        🔍 검색
                     </button>
                 </div>
             </div>
             
+            <!-- 내역 목록 -->
             <div id="changePointsList"></div>
+            
+            <!-- 엑셀 다운로드 버튼 (제일 아래) -->
+            <div style="margin-top: 24px; text-align: center;">
+                <button onclick="downloadExcel()" style="padding: 16px 48px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; border-radius: 12px; color: white; font-size: 16px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 16px rgba(16, 185, 129, 0.4); width: 100%; max-width: 400px;">
+                    📊 엑셀 다운로드
+                </button>
+            </div>
         </div>
         
         <!-- 대시보드 페이지 -->
@@ -647,6 +677,8 @@
         // 데이터
         let changePoints = [];
         let currentUser = { name: '', employeeId: '', department: '' };
+        let currentDisplayedData = []; // 현재 화면에 표시 중인 데이터
+        let currentSearchDates = { start: '', end: '' }; // 현재 검색 중인 날짜 범위
         
         const classifications = [
             { 
@@ -1122,13 +1154,116 @@
             }
         }
         
-        // 엑셀 다운로드 함수
-        function downloadExcel() {
+        // 날짜 범위 검색 함수
+        function searchByDate() {
             const startDate = document.getElementById('startDate').value;
             const endDate = document.getElementById('endDate').value;
             
             if (!startDate || !endDate) {
                 alert('시작일과 종료일을 모두 선택해주세요.');
+                return;
+            }
+            
+            if (new Date(startDate) > new Date(endDate)) {
+                alert('시작일이 종료일보다 늦을 수 없습니다.');
+                return;
+            }
+            
+            // 현재 검색 날짜 저장
+            currentSearchDates = { start: startDate, end: endDate };
+            
+            // 로딩 표시
+            const listDiv = document.getElementById('changePointsList');
+            listDiv.innerHTML = '<div style="text-align: center; padding: 40px; color: #94a3b8; font-size: 16px;">🔍 데이터를 검색하는 중...</div>';
+            
+            // 콜백 함수 이름 생성
+            const callbackName = 'searchCallback_' + Date.now();
+            
+            // 전역 콜백 함수 등록
+            window[callbackName] = function(data) {
+                if (data.error) {
+                    listDiv.innerHTML = '<div style="text-align: center; padding: 40px; color: #ef4444; font-size: 16px;">❌ 데이터 조회 중 오류가 발생했습니다.</div>';
+                    alert('데이터 조회 중 오류가 발생했습니다: ' + data.error);
+                    return;
+                }
+                
+                // 현재 표시 중인 데이터 저장
+                currentDisplayedData = data;
+                
+                if (!data || data.length === 0) {
+                    listDiv.innerHTML = '<div style="text-align: center; padding: 40px; color: #94a3b8; font-size: 16px;">📭 선택한 기간에 데이터가 없습니다.</div>';
+                    return;
+                }
+                
+                // 검색 결과 표시
+                let html = '<div style="margin-bottom: 16px; padding: 12px; background: rgba(59, 130, 246, 0.1); border: 2px solid #3b82f6; border-radius: 8px; color: #3b82f6; font-weight: 600; text-align: center;">';
+                html += `🔍 검색 결과: ${startDate} ~ ${endDate} (총 ${data.length}건)`;
+                html += '</div>';
+                
+                data.forEach(cp => {
+                    const date = new Date(cp.timestamp);
+                    const dateStr = date.toLocaleDateString('ko-KR');
+                    const timeStr = date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+                    
+                    html += `
+                        <div class="change-point-item" style="background: #1e293b; border-radius: 12px; padding: 16px; margin-bottom: 12px; border: 2px solid #334155;">
+                            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
+                                <div>
+                                    <div style="color: #3b82f6; font-weight: 700; font-size: 16px; margin-bottom: 4px;">${cp.category}</div>
+                                    <div style="color: #94a3b8; font-size: 14px;">${cp.item || ''}</div>
+                                </div>
+                                <div style="text-align: right;">
+                                    <div style="color: #f8fafc; font-size: 14px; font-weight: 600;">${dateStr}</div>
+                                    <div style="color: #94a3b8; font-size: 13px;">${timeStr}</div>
+                                </div>
+                            </div>
+                            <div style="color: #f8fafc; font-size: 15px; line-height: 1.6; margin-bottom: 12px;">${cp.description}</div>
+                            <div style="display: flex; gap: 12px; font-size: 13px;">
+                                <span style="color: #94a3b8;">부서: <span style="color: #f8fafc;">${cp.department || '-'}</span></span>
+                                <span style="color: #94a3b8;">담당: <span style="color: #f8fafc;">${cp.manager || '-'}</span></span>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                listDiv.innerHTML = html;
+                
+                // 콜백 함수 제거
+                delete window[callbackName];
+            };
+            
+            // JSONP 요청 생성
+            const script = document.createElement('script');
+            const url = SCRIPT_URL + 
+                '?action=getListByDate' +
+                '&startDate=' + encodeURIComponent(startDate) +
+                '&endDate=' + encodeURIComponent(endDate) +
+                '&callback=' + callbackName;
+            
+            script.src = url;
+            script.onerror = function() {
+                listDiv.innerHTML = '<div style="text-align: center; padding: 40px; color: #ef4444; font-size: 16px;">❌ 데이터 조회 중 오류가 발생했습니다.</div>';
+                alert('데이터 조회 중 오류가 발생했습니다.');
+                delete window[callbackName];
+            };
+            
+            document.body.appendChild(script);
+        }
+        
+        // 엑셀 다운로드 함수
+        function downloadExcel() {
+            // 현재 표시 중인 데이터가 있으면 바로 다운로드
+            if (currentDisplayedData && currentDisplayedData.length > 0) {
+                generateExcelFile(currentDisplayedData, currentSearchDates.start, currentSearchDates.end);
+                return;
+            }
+            
+            // 표시 중인 데이터가 없으면 날짜 확인 후 검색
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            
+            if (!startDate || !endDate) {
+                alert('먼저 검색 버튼을 눌러 데이터를 조회해주세요.');
                 return;
             }
             
@@ -1152,54 +1287,17 @@
                 
                 if (data.error) {
                     alert('데이터 조회 중 오류가 발생했습니다: ' + data.error);
+                    delete window[callbackName];
                     return;
                 }
                 
                 if (!data || data.length === 0) {
                     alert('선택한 기간에 데이터가 없습니다.');
+                    delete window[callbackName];
                     return;
                 }
                 
-                // 엑셀 데이터 준비
-                const excelData = data.map((item, index) => ({
-                    '번호': index + 1,
-                    '일시': new Date(item.timestamp).toLocaleString('ko-KR'),
-                    '분류': item.category,
-                    '항목': item.item,
-                    '발생부서': item.department,
-                    '담당자': item.manager,
-                    '상세내용': item.description,
-                    '사번': item.employeeId
-                }));
-                
-                // 워크시트 생성
-                const ws = XLSX.utils.json_to_sheet(excelData);
-                
-                // 열 너비 설정
-                ws['!cols'] = [
-                    { wch: 8 },   // 번호
-                    { wch: 20 },  // 일시
-                    { wch: 15 },  // 분류
-                    { wch: 20 },  // 항목
-                    { wch: 15 },  // 발생부서
-                    { wch: 12 },  // 담당자
-                    { wch: 50 },  // 상세내용
-                    { wch: 12 }   // 사번
-                ];
-                
-                // 워크북 생성
-                const wb = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(wb, ws, '변동점내역');
-                
-                // 파일명 생성
-                const fileName = `변동점내역_${startDate}_${endDate}.xlsx`;
-                
-                // 다운로드
-                XLSX.writeFile(wb, fileName);
-                
-                alert(`${data.length}건의 데이터가 다운로드되었습니다.`);
-                
-                // 콜백 함수 제거
+                generateExcelFile(data, startDate, endDate);
                 delete window[callbackName];
             };
             
@@ -1219,6 +1317,48 @@
             };
             
             document.body.appendChild(script);
+        }
+        
+        // 엑셀 파일 생성 함수
+        function generateExcelFile(data, startDate, endDate) {
+            // 엑셀 데이터 준비
+            const excelData = data.map((item, index) => ({
+                '번호': index + 1,
+                '일시': new Date(item.timestamp).toLocaleString('ko-KR'),
+                '분류': item.category,
+                '항목': item.item,
+                '발생부서': item.department,
+                '담당자': item.manager,
+                '상세내용': item.description,
+                '사번': item.employeeId
+            }));
+            
+            // 워크시트 생성
+            const ws = XLSX.utils.json_to_sheet(excelData);
+            
+            // 열 너비 설정
+            ws['!cols'] = [
+                { wch: 8 },   // 번호
+                { wch: 20 },  // 일시
+                { wch: 15 },  // 분류
+                { wch: 20 },  // 항목
+                { wch: 15 },  // 발생부서
+                { wch: 12 },  // 담당자
+                { wch: 50 },  // 상세내용
+                { wch: 12 }   // 사번
+            ];
+            
+            // 워크북 생성
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, '변동점내역');
+            
+            // 파일명 생성
+            const fileName = `변동점내역_${startDate}_${endDate}.xlsx`;
+            
+            // 다운로드
+            XLSX.writeFile(wb, fileName);
+            
+            alert(`${data.length}건의 데이터가 다운로드되었습니다.`);
         }
         
         function updateStats() {
